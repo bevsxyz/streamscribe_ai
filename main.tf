@@ -1,79 +1,104 @@
 # Provider configuration
 provider "aws" {
   region = "us-west-2"
-  shared_config_files      = ["/Users/tf_user/.aws/conf"]
-  shared_credentials_files = ["/Users/tf_user/.aws/creds"]
 }
 
-# Variables
-variable "project_name" {
-  description = "The name of the project"
-  type        = string
-  default     = "streamscribe"
+# VPC and Networking
+resource "aws_vpc" "streamscribe_vpc" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "streamscribe-vpc"
+  }
 }
 
-variable "environment" {
-  description = "The deployment environment"
-  type        = string
-  default     = "dev"
+resource "aws_subnet" "streamscribe_subnet" {
+  vpc_id                  = aws_vpc.streamscribe_vpc.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "us-west-2a"  # Change this according to your region
+
+  tags = {
+    Name = "streamscribe-subnet"
+  }
 }
 
-# Locals for bucket naming
-locals {
-  bucket_name   = "${var.project_name}-${var.environment}-storage"
-  bucket_exists = can(data.aws_s3_bucket.existing_bucket[0].id)
+resource "aws_internet_gateway" "streamscribe_igw" {
+  vpc_id = aws_vpc.streamscribe_vpc.id
+
+  tags = {
+    Name = "streamscribe-igw"
+  }
 }
 
-# Data source to check if the S3 bucket already exists
-data "aws_s3_bucket" "existing_bucket" {
-  count  = try(data.aws_s3_bucket.existing_bucket[0].id, "") != "" ? 1 : 0
-  bucket = local.bucket_name
+resource "aws_route_table" "streamscribe_rt" {
+  vpc_id = aws_vpc.streamscribe_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.streamscribe_igw.id
+  }
+
+  tags = {
+    Name = "streamscribe-rt"
+  }
 }
 
-# S3 bucket for video and processed data storage
-resource "aws_s3_bucket" "video_storage" {
-  # Only create if the bucket doesn't exist
-  count  = local.bucket_exists ? 0 : 1
-  bucket = local.bucket_name
+resource "aws_route_table_association" "streamscribe_rta" {
+  subnet_id      = aws_subnet.streamscribe_subnet.id
+  route_table_id = aws_route_table.streamscribe_rt.id
+}
+
+# Security Group
+resource "aws_security_group" "streamscribe_sg" {
+  name        = "streamscribe-sg"
+  description = "Security group for StreamScribe EC2 instance"
+  vpc_id      = aws_vpc.streamscribe_vpc.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Consider restricting to your IP for production
+  }
+
+  ingress {
+    from_port   = 8501
+    to_port     = 8501
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Streamlit port
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "streamscribe-sg"
+  }
+}
+
+# S3 Bucket
+resource "aws_s3_bucket" "streamscribe_bucket" {
+  bucket        = "streamscribe-data-bucket"  # Change this to your preferred bucket name
+  force_destroy = false
 
   lifecycle {
     prevent_destroy = true
   }
 
   tags = {
-    Name        = "${var.project_name}-video-storage"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
+    Name = "streamscribe-bucket"
   }
 }
 
-# Use this local for references to the bucket
-locals {
-  bucket_id = local.bucket_exists ? data.aws_s3_bucket.existing_bucket[0].id : try(aws_s3_bucket.video_storage[0].id, local.bucket_name)
-}
-
-# Enable versioning
-resource "aws_s3_bucket_versioning" "video_storage_versioning" {
-  bucket = local.bucket_id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-# Enable server-side encryption
-resource "aws_s3_bucket_server_side_encryption_configuration" "video_storage_encryption" {
-  bucket = local.bucket_id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-# Block public access
-resource "aws_s3_bucket_public_access_block" "video_storage_public_access_block" {
-  bucket = local.bucket_id
+resource "aws_s3_bucket_public_access_block" "streamscribe_bucket_access" {
+  bucket = aws_s3_bucket.streamscribe_bucket.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -81,25 +106,9 @@ resource "aws_s3_bucket_public_access_block" "video_storage_public_access_block"
   restrict_public_buckets = true
 }
 
-# Lambda function for video processing
-resource "aws_lambda_function" "video_processor" {
-  filename         = "lambda/video_processor.zip"
-  function_name    = "${var.project_name}-${var.environment}-video-processor"
-  role             = aws_iam_role.lambda_role.arn
-  handler          = "video_processor.lambda_handler"
-  runtime          = "python3.9"
-  timeout          = 900
-
-  environment {
-    variables = {
-      S3_BUCKET = local.bucket_id
-    }
-  }
-}
-
-# IAM role for Lambda
-resource "aws_iam_role" "lambda_role" {
-  name = "${var.project_name}-${var.environment}-lambda-role"
+# IAM Role for EC2
+resource "aws_iam_role" "streamscribe_role" {
+  name = "streamscribe_role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -108,17 +117,21 @@ resource "aws_iam_role" "lambda_role" {
         Action = "sts:AssumeRole"
         Effect = "Allow"
         Principal = {
-          Service = "lambda.amazonaws.com"
+          Service = "ec2.amazonaws.com"
         }
       }
     ]
   })
+
+  tags = {
+    Name = "streamscribe-role"
+  }
 }
 
-# IAM policy for Lambda to access S3 and CloudWatch Logs
-resource "aws_iam_role_policy" "lambda_policy" {
-  name = "${var.project_name}-${var.environment}-lambda-policy"
-  role = aws_iam_role.lambda_role.id
+# IAM Policy for S3 access
+resource "aws_iam_role_policy" "streamscribe_s3_policy" {
+  name = "streamscribe_s3_policy"
+  role = aws_iam_role.streamscribe_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -131,34 +144,56 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "s3:ListBucket"
         ]
         Resource = [
-          "arn:aws:s3:::${local.bucket_id}",
-          "arn:aws:s3:::${local.bucket_id}/*"
+          aws_s3_bucket.streamscribe_bucket.arn,
+          "${aws_s3_bucket.streamscribe_bucket.arn}/*"
         ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "arn:aws:logs:*:*:*"
       }
     ]
   })
 }
 
-# CloudWatch Log Group for Lambda
-resource "aws_cloudwatch_log_group" "lambda_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.video_processor.function_name}"
-  retention_in_days = 14
+resource "aws_iam_instance_profile" "streamscribe_profile" {
+  name = "streamscribe_profile"
+  role = aws_iam_role.streamscribe_role.name
+}
+
+# EC2 Instance
+resource "aws_instance" "streamscribe_instance" {
+  ami           = "ami-04dd23e62ed049936"  # Ubuntu 20.04 LTS - change according to your region
+  instance_type = "t2.micro"  # Adjusted for cost optimization
+
+  vpc_security_group_ids = [aws_security_group.streamscribe_sg.id]
+  subnet_id              = aws_subnet.streamscribe_subnet.id
+  iam_instance_profile   = aws_iam_instance_profile.streamscribe_profile.name
+
+  root_block_device {
+    volume_size = 8  # Adjusted for cost optimization
+  }
+
+  user_data = <<-EOF
+              #!/bin/bash
+              apt-get update
+              apt-get install -y python3-pip default-jdk
+              pip3 install pyspark streamlit boto3 openai
+
+              # Auto-shutdown script
+              echo "0 19 * * * root /usr/sbin/shutdown -h now" | tee -a /etc/crontab
+              EOF
+
+  tags = {
+    Name = "streamscribe-instance"
+  }
 }
 
 # Outputs
-output "s3_bucket_name" {
-  value = local.bucket_id
+output "instance_public_ip" {
+  value = aws_instance.streamscribe_instance.public_ip
 }
 
-output "bucket_creation_status" {
-  value = local.bucket_exists ? "Using existing bucket" : "Creating new bucket"
+output "s3_bucket_name" {
+  value = aws_s3_bucket.streamscribe_bucket.id
+}
+
+output "important_notice" {
+  value = "Note: The S3 bucket is configured with prevent_destroy. It will not be deleted when running terraform destroy."
 }
