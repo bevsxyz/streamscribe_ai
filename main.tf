@@ -88,9 +88,9 @@ resource "aws_s3_bucket" "streamscribe_bucket" {
   bucket        = "streamscribe-data-bucket"  # Change this to your preferred bucket name
   force_destroy = false
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   tags = {
     Name = "streamscribe-bucket"
@@ -157,6 +157,12 @@ resource "aws_iam_instance_profile" "streamscribe_profile" {
   role = aws_iam_role.streamscribe_role.name
 }
 
+# Key pair for SSH access
+resource "aws_key_pair" "streamscribe_key" {
+  key_name   = "streamscribe-key"
+  public_key = file("~/.ssh/id_ed25519.pub")  # Make sure this key exists
+}
+
 # EC2 Instance
 resource "aws_instance" "streamscribe_instance" {
   ami           = "ami-04dd23e62ed049936"  # Ubuntu 20.04 LTS - change according to your region
@@ -165,20 +171,49 @@ resource "aws_instance" "streamscribe_instance" {
   vpc_security_group_ids = [aws_security_group.streamscribe_sg.id]
   subnet_id              = aws_subnet.streamscribe_subnet.id
   iam_instance_profile   = aws_iam_instance_profile.streamscribe_profile.name
+  key_name               = aws_key_pair.streamscribe_key.key_name
 
   root_block_device {
     volume_size = 8  # Adjusted for cost optimization
   }
 
+  # Initial setup script
   user_data = <<-EOF
               #!/bin/bash
               apt-get update
               apt-get install -y python3-pip default-jdk
-              pip3 install pyspark streamlit boto3 openai
+              pip3 install pyspark streamlit boto3 openai yt-dlp
 
               # Auto-shutdown script
               echo "0 19 * * * root /usr/sbin/shutdown -h now" | tee -a /etc/crontab
               EOF
+  
+     # Wait for instance to be ready before provisioning
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file("~/.ssh/id_ed25519")
+    host        = self.public_ip
+  }
+
+  # Copy the video_downloader.py file
+  provisioner "file" {
+    source      = "video_downloader.py"
+    destination = "/tmp/video_downloader.py"
+  }
+
+  # Set up the application after copying file
+  provisioner "remote-exec" {
+    inline = [
+      # Ensure the directory exists
+      "sudo mkdir -p /opt/streamscribe",
+      "sudo chown ubuntu:ubuntu /opt/streamscribe",
+      "chmod 755 /opt/streamscribe",
+      "chmod +x /tmp/video_downloader.py",
+      "mv /tmp/video_downloader.py /opt/streamscribe/video_downloader.py",
+      "echo 'Python script has been copied and permissions set.'"
+    ]
+  }
 
   tags = {
     Name = "streamscribe-instance"
@@ -196,4 +231,9 @@ output "s3_bucket_name" {
 
 output "important_notice" {
   value = "Note: The S3 bucket is configured with prevent_destroy. It will not be deleted when running terraform destroy."
+}
+
+# Additional output for SSH command
+output "ssh_command" {
+  value = "ssh -i ~/.ssh/id_rsa ubuntu@${aws_instance.streamscribe_instance.public_ip}"
 }
