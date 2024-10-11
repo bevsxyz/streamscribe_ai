@@ -1,0 +1,4 @@
+.terraform
+__pycache__
+python
+youtube-lambda-layer
