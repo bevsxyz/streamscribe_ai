@@ -181,8 +181,16 @@ resource "aws_instance" "streamscribe_instance" {
   user_data = <<-EOF
               #!/bin/bash
               apt-get update
-              apt-get install -y python3-pip default-jdk
-              pip3 install pyspark streamlit boto3 openai yt-dlp
+              apt-get install -y python3-venv python3-pip default-jdk yt-dlp
+              # Create a new Python virtual environment
+              python3 -m venv /opt/streamscribe/venv
+              chmod +x /opt/streamscribe/venv/bin/activate
+
+              # Activate the virtual environment
+              source /opt/streamscribe/venv/bin/activate
+
+              # Install Python packages in the virtual environment
+              pip install pyspark streamlit boto3 openai awscli
 
               # Auto-shutdown script
               echo "0 19 * * * root /usr/sbin/shutdown -h now" | tee -a /etc/crontab
@@ -198,8 +206,8 @@ resource "aws_instance" "streamscribe_instance" {
 
   # Copy the video_downloader.py file
   provisioner "file" {
-    source      = "video_downloader.py"
-    destination = "/tmp/video_downloader.py"
+    source      = "vid_down.sh"
+    destination = "/tmp/vid_down.sh"
   }
 
   # Set up the application after copying file
@@ -209,8 +217,9 @@ resource "aws_instance" "streamscribe_instance" {
       "sudo mkdir -p /opt/streamscribe",
       "sudo chown ubuntu:ubuntu /opt/streamscribe",
       "chmod 755 /opt/streamscribe",
-      "chmod +x /tmp/video_downloader.py",
-      "mv /tmp/video_downloader.py /opt/streamscribe/video_downloader.py",
+      "chmod +x /tmp/vid_down.sh",
+      "mv /tmp/vid_down.sh /opt/vid_down.sh",
+      "echo 'source /opt/streamscribe/venv/bin/activate' >> /home/ubuntu/.bashrc",
       "echo 'Python script has been copied and permissions set.'"
     ]
   }
@@ -235,5 +244,5 @@ output "important_notice" {
 
 # Additional output for SSH command
 output "ssh_command" {
-  value = "ssh -i ~/.ssh/id_rsa ubuntu@${aws_instance.streamscribe_instance.public_ip}"
+  value = "ssh -i ~/.ssh/id_ed25519 ubuntu@${aws_instance.streamscribe_instance.public_ip}"
 }
