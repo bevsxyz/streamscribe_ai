@@ -1,5 +1,6 @@
 # Provider configuration
 provider "aws" {
+  profile = "kirti"
   region = "us-west-2"
 }
 
@@ -86,11 +87,11 @@ resource "aws_security_group" "streamscribe_sg" {
 # S3 Bucket
 resource "aws_s3_bucket" "streamscribe_bucket" {
   bucket        = "streamscribe-data-bucket"  # Change this to your preferred bucket name
-  force_destroy = false
+  force_destroy = true
 
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
+  lifecycle {
+    prevent_destroy = false
+  }
 
   tags = {
     Name = "streamscribe-bucket"
@@ -218,7 +219,7 @@ resource "aws_instance" "streamscribe_instance" {
       "sudo chown ubuntu:ubuntu /opt/streamscribe",
       "chmod 755 /opt/streamscribe",
       "chmod +x /tmp/vid_down.sh",
-      "mv /tmp/vid_down.sh /opt/vid_down.sh",
+      "mv /tmp/vid_down.sh /opt/streamscribe/vid_down.sh",
       "echo 'source /opt/streamscribe/venv/bin/activate' >> /home/ubuntu/.bashrc",
       "echo 'Python script has been copied and permissions set.'"
     ]
