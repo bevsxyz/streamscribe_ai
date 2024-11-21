@@ -32,7 +32,7 @@ yt-dlp -f "wv,wa" \
 
 # Download best quality video+audio directly
 echo "Downloading best quality video+audio..."
-yt-dlp -f "wv*+wa/w" \
+yt-dlp -f "wv*+ba/b" \
     --merge-output-format mp4 \
     -o "${VIDEO_ID}_full.%(ext)s" \
     "$URL"
@@ -58,7 +58,7 @@ ${VIDEO_ID}_full.mp4     - Directly downloaded best quality video
 ${VIDEO_ID}_audio.mp3    - Audio-only file
 ${VIDEO_ID}.jpg          - Thumbnail image
 ${VIDEO_ID}_metadata.json - Metadata in JSON format
-*.vtt                    - Subtitles (if available)"
+${VIDEO_ID}*.vtt                    - Subtitles (if available)"
 
 echo "Uploading all files to S3..."
 # Upload all files that start with VIDEO_ID to S3
@@ -66,6 +66,13 @@ aws s3 cp . "s3://${BUCKET}/${PREFIX}/${VIDEO_ID}" \
     --recursive \
     --exclude "*" \
     --include "${VIDEO_ID}*"
+
+echo "Updating CSV file with object keys..."
+# Append all S3 keys and local file paths to a CSV file
+for file in ${VIDEO_ID}*; do
+    S3_KEY="${PREFIX}/${VIDEO_ID}/${file}"
+    echo "${VIDEO_ID},${S3_KEY},${file}" >> uploaded_files.csv
+done
 
 echo "Cleanup starting..."
 # Cleanup local files
