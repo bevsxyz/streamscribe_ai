@@ -146,6 +146,11 @@ resource "aws_instance" "streamscribe_instance" {
     destination = "/tmp/vid_down.sh"
   }
 
+  provisioner "file" {
+    source      = "main.py"
+    destination = "/tmp/main.py"
+  }
+
   provisioner "remote-exec" {
     inline = [
       "sudo mkdir -p /opt/streamscribe",
@@ -153,6 +158,7 @@ resource "aws_instance" "streamscribe_instance" {
       "chmod 755 /opt/streamscribe",
       "chmod +x /tmp/vid_down.sh",
       "mv /tmp/vid_down.sh /opt/streamscribe/vid_down.sh",
+      "mv /tmp/main.py /opt/streamscribe/main.py"
       "echo 'source /opt/streamscribe/venv/bin/activate' >> /home/ubuntu/.bashrc",
       "echo 'Python script has been copied and permissions set.'"
     ]
