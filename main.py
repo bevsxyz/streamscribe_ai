@@ -60,7 +60,7 @@ class S3VideoStreamer:
     def initialize_openai(self):
         """Initialize OpenAI API with error handling"""
         try:
-            openai.api_key = st.secrets["OPENAI_API_KEY"]
+            openai.api_key = st.secrets["general"]["OPENAI_API_KEY"]
         except KeyError:
             st.error("Please set your OpenAI API key in Streamlit secrets.")
             st.stop()
