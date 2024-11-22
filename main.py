@@ -46,7 +46,7 @@ def handle_vimeo_url():
             st.text(result)
 
             # Reload the page once the download is complete
-            st.experimental_rerun()
+            st.rerun()
 
 
 class S3VideoStreamer:

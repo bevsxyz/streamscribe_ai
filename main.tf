@@ -126,11 +126,11 @@ resource "aws_instance" "streamscribe_instance" {
   user_data = <<-EOF
     #!/bin/bash
     apt-get update
-    apt-get install -y python3-venv python3-pip default-jdk yt-dlp
+    apt-get install -y python3-venv python3-pip ffmpeg
     python3 -m venv /opt/streamscribe/venv
     chmod +x /opt/streamscribe/venv/bin/activate
     source /opt/streamscribe/venv/bin/activate
-    pip install pyspark streamlit boto3 openai awscli
+    pip install streamlit boto3 openai==0.28 awscli yt-dlp
     echo "0 19 * * * root /usr/sbin/shutdown -h now" | tee -a /etc/crontab
   EOF
 
@@ -151,6 +151,16 @@ resource "aws_instance" "streamscribe_instance" {
     destination = "/tmp/main.py"
   }
 
+  provisioner "file" {
+    source      = ".streamlit/secrets.toml"
+    destination = "/tmp/secrets.toml"
+  }
+
+  provisioner "file" {
+    source      = "streamlit.service"
+    destination = "/tmp/streamlit.service"
+  }
+
   provisioner "remote-exec" {
     inline = [
       "sudo mkdir -p /opt/streamscribe",
@@ -158,9 +168,19 @@ resource "aws_instance" "streamscribe_instance" {
       "chmod 755 /opt/streamscribe",
       "chmod +x /tmp/vid_down.sh",
       "mv /tmp/vid_down.sh /opt/streamscribe/vid_down.sh",
-      "mv /tmp/main.py /opt/streamscribe/main.py"
+      "mv /tmp/main.py /opt/streamscribe/main.py",
+      "mkdir -p /home/ubuntu/.streamlit/",
+      "mv /tmp/secrets.toml /home/ubuntu/.streamlit/secrets.toml",
       "echo 'source /opt/streamscribe/venv/bin/activate' >> /home/ubuntu/.bashrc",
-      "echo 'Python script has been copied and permissions set.'"
+      "echo 'Python script has been copied and permissions set.'",
+      # Move the Streamlit service file to systemd directory
+      "sudo mkdir -p /etc/systemd/system/",
+      "sudo mv /tmp/streamlit.service /etc/systemd/system/streamlit.service",
+
+      # Reload systemd, enable, and start the service
+      "sudo systemctl daemon-reload",
+      "sudo systemctl enable streamlit.service",
+      "sudo systemctl start streamlit.service"      
     ]
   }
 

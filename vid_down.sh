@@ -6,6 +6,8 @@ if [ "$#" -lt 1 ]; then
     exit 1
 fi
 
+source /opt/streamscribe/venv/bin/activate
+
 URL="$1"
 BUCKET="${2:-streamscribe-data-bucket}"
 PREFIX="${3:-video}" # Optional prefix, empty if not provided
@@ -32,7 +34,7 @@ yt-dlp -f "wv,wa" \
 
 # Download best quality video+audio directly
 echo "Downloading best quality video+audio..."
-yt-dlp -f "wv*+ba/b" \
+yt-dlp -f "wv+ba/b" \
     --merge-output-format mp4 \
     -o "${VIDEO_ID}_full.%(ext)s" \
     "$URL"
@@ -49,6 +51,11 @@ echo "Downloading metadata..."
 yt-dlp -J "$URL" > "${VIDEO_ID}_metadata.json"
 
 echo "Download completed. Files:"
+
+for file in ./${VIDEO_ID}*.mp4; do
+  mv "$file" "$(echo "$file" | sed 's/\(.*\)\.fhls.*\(\.mp4\)/\1\2/')"
+done
+
 ls -l ${VIDEO_ID}*
 
 echo "
