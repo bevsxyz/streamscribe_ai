@@ -56,6 +56,7 @@ class S3VideoStreamer:
         self.s3_client = boto3.client('s3')
         self.csv_file_path = "uploaded_files.csv"
         self.vtt_content = ""
+        self.initialize_openai()
     
     def initialize_openai(self):
         """Initialize OpenAI API with error handling"""
