@@ -204,3 +204,8 @@ output "important_notice" {
 output "ssh_command" {
   value = "ssh -i ~/.ssh/id_ed25519 ubuntu@${aws_instance.streamscribe_instance.public_ip}"
 }
+
+# Output the instance ID
+output "instance_id" {
+  value = aws_instance.streamscribe_instance.id
+}

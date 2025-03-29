@@ -25,7 +25,7 @@ echo "Downloading content for video ID: $VIDEO_ID"
 
 # Download separate video and audio streams and merge
 echo "Downloading separate streams and performing merge..."
-yt-dlp -f "wv,wa" \
+yt-dlp --skip-download \
     --write-subs \
     --write-thumbnail \
     --convert-thumbnails jpg \
@@ -34,7 +34,7 @@ yt-dlp -f "wv,wa" \
 
 # Download best quality video+audio directly
 echo "Downloading best quality video+audio..."
-yt-dlp -f "wv+ba/b" \
+yt-dlp -f "bv+ba/b" \
     --merge-output-format mp4 \
     -o "${VIDEO_ID}_full.%(ext)s" \
     "$URL"

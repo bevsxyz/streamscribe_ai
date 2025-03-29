@@ -23,12 +23,20 @@ def process_video(url, bucket_name, prefix=''):
         ydl_opts = {
             'outtmpl': os.path.join(temp_dir, '%(id)s.%(ext)s'),
             'quiet': True,
-            'format': 'best',  # Download best quality
-            'postprocessors': [{
+            'format': 'worstvideo+worstaudio/worst',  # Download best video and audio
+            'merge_output_format': 'mp4',  # Merging to mp4 format
+            'verbose': True,
+            'postprocessors': [
+                {
+                    'key': 'FFmpegVideoMerge',  # Use this for merging video and audio
+                },
+                {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
+            'writethumbnail': True,  # Optional: Download thumbnail
+            'writeinfojson': True,  # Optional: Download metadata
         }
         
         # Download video (this will also extract audio due to postprocessor)
@@ -53,11 +61,11 @@ def process_video(url, bucket_name, prefix=''):
         
         # Upload video
         with open(video_filename, 'rb') as f:
-            upload_fileobj_to_s3(f, bucket_name, f'{prefix}{video_id}_full.mp4')
+            upload_fileobj_to_s3(f, bucket_name, f'{prefix}{video_id}.mp4')
         
         # Upload audio
         with open(audio_filename, 'rb') as f:
-            upload_fileobj_to_s3(f, bucket_name, f'{prefix}{video_id}_audio.mp3')
+            upload_fileobj_to_s3(f, bucket_name, f'{prefix}{video_id}.mp3')
         
         # Upload metadata
         metadata_json = json.dumps(metadata, indent=2)

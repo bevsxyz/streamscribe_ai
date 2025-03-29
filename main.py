@@ -155,7 +155,7 @@ class S3VideoStreamer:
             chat_history = st.empty()  # Empty container to hold the chat messages
             chat_history.markdown("<div style='height: 300px; overflow-y: scroll;'>", unsafe_allow_html=True)  # You can adjust height as needed
             
-            for message in reversed(st.session_state.messages):  # Reverse the message list to show the latest first
+            for message in st.session_state.messages:  # Reverse the message list to show the latest first
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
             
