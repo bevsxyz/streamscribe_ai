@@ -126,13 +126,21 @@ resource "aws_instance" "streamscribe_instance" {
   user_data = <<-EOF
     #!/bin/bash
     apt-get update
-    apt-get install -y python3-venv python3-pip ffmpeg
+    apt-get install -y python3-venv python3-pip ffmpeg openjdk-11-jdk
+
+    # Set JAVA_HOME for Spark
+    echo 'export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64' >> /etc/profile
+    export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+
     python3 -m venv /opt/streamscribe/venv
     chmod +x /opt/streamscribe/venv/bin/activate
     source /opt/streamscribe/venv/bin/activate
-    pip install streamlit boto3 openai==0.28 awscli yt-dlp
+
+    pip install streamlit boto3 openai==0.28 awscli yt-dlp pyspark pandas pyarrow
+
     echo "0 19 * * * root /usr/sbin/shutdown -h now" | tee -a /etc/crontab
   EOF
+
 
   connection {
     type        = "ssh"

@@ -81,8 +81,11 @@ for file in ${VIDEO_ID}*; do
     echo "${VIDEO_ID},${S3_KEY},${file}" >> uploaded_files.csv
 done
 
+# Submit your PySpark job
+spark-submit --master spark://localhost:7077 update_uploaded_files_table.py
+
 echo "Cleanup starting..."
 # Cleanup local files
-rm -f ${VIDEO_ID}*
+#rm -f ${VIDEO_ID}*
 
 echo "Process completed!"
